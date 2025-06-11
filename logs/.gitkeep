@@ -1,0 +1,2 @@
+# 這個檔案確保logs資料夾被Git追蹤
+# 但logs資料夾內的日誌檔案會被.gitignore忽略
