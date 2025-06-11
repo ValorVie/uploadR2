@@ -246,6 +246,9 @@ class BatchProcessor:
                         # 檔案已存在，標記為重複
                         # 重複檔案不加入 uploaded_urls 清單
                         self.progress_tracker.duplicate_file(original_path, upload_result)
+                        
+                        # 清理重複檔案的 transfer 檔案
+                        self.cleanup_duplicate_file(transfer_path)
                     else:
                         # 真正上傳成功，收集URL
                         self.uploaded_urls.append(upload_result)
@@ -254,14 +257,14 @@ class BatchProcessor:
                             transfer_path.name,
                             upload_result
                         )
-                    
-                    # 清理處理後的檔案（可選）
-                    if self.config.filename_format != "original":
-                        try:
-                            transfer_path.unlink()
-                            self.logger.debug(f"已清理暫存檔案: {transfer_path}")
-                        except Exception as e:
-                            self.logger.warning(f"清理暫存檔案失敗: {transfer_path} - {str(e)}")
+                        
+                        # 清理處理後的檔案（可選）
+                        if self.config.filename_format != "original":
+                            try:
+                                transfer_path.unlink()
+                                self.logger.debug(f"已清理暫存檔案: {transfer_path}")
+                            except Exception as e:
+                                self.logger.warning(f"清理暫存檔案失敗: {transfer_path} - {str(e)}")
                 else:
                     # 上傳失敗
                     self.progress_tracker.fail_file(original_path, upload_result)
@@ -276,6 +279,30 @@ class BatchProcessor:
             except Exception as e:
                 error_message = f"處理檔案時發生未預期錯誤: {str(e)}"
                 self.progress_tracker.fail_file(original_path, error_message)
+                
+                # 清理可能產生的 transfer 檔案
+                if 'transfer_path' in locals() and transfer_path and transfer_path.exists():
+                    try:
+                        transfer_path.unlink()
+                        self.logger.debug(f"已清理異常處理中的檔案: {transfer_path}")
+                    except Exception:
+                        pass
+    
+    def cleanup_duplicate_file(self, transfer_path: Path) -> None:
+        """
+        清理重複檔案的 transfer 檔案
+        
+        Args:
+            transfer_path: 需要清理的 transfer 檔案路徑
+        """
+        try:
+            if transfer_path and transfer_path.exists():
+                transfer_path.unlink()
+                self.logger.info(f"已清理重複檔案: {transfer_path}")
+            else:
+                self.logger.debug(f"清理目標檔案不存在: {transfer_path}")
+        except Exception as e:
+            self.logger.error(f"清理重複檔案失敗: {transfer_path} - {str(e)}")
     
     def copy_images_to_transfer(self, image_files: List[Path]) -> List[Tuple[Path, Path]]:
         """
