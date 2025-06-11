@@ -53,8 +53,8 @@ coverage.xml
 dmypy.json
 
 # Images transfer folder content (but keep the folder)
-images/transfer/*
-!images/transfer/.gitkeep
+images/
+# !images/transfer/.gitkeep
 
 # Temporary files
 *.tmp

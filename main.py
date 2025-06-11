@@ -224,12 +224,17 @@ async def main_async(args: argparse.Namespace) -> int:
             for i, filename in enumerate(duplicate_files, 1):
                 logger.info(f"{i:2d}. {filename}")
         
-        # 顯示上傳成功的檔案URL清單（包含原始檔名對應）
+        # 顯示上傳成功的檔案URL清單（只包含真正上傳的檔案，不包含重複檔案）
         uploaded_files_with_urls = processor.get_uploaded_files_with_urls()
         if uploaded_files_with_urls:
-            logger.info("=== 上傳成功的圖片URL ===")
+            logger.info("=== 成功上傳的圖片URL ===")
             for i, (filename, url) in enumerate(uploaded_files_with_urls, 1):
                 logger.info(f"{i:2d}. {filename} -> {url}")
+        
+        # 如果有重複檔案但沒有新上傳的檔案，給出提示
+        if duplicate_files and not uploaded_files_with_urls:
+            logger.info("=== 注意 ===")
+            logger.info("所有檔案都已存在於R2儲存桶中，沒有新檔案需要上傳。")
         
         # 顯示失敗檔案
         failed_files = processor.get_failed_files()

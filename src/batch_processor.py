@@ -82,6 +82,7 @@ class BatchProcessor:
     def _generate_new_filename(self, original_path: Path) -> str:
         """
         產生新的檔案名稱
+        格式: {原始檔名}_{uuid}.{副檔名}
         
         Args:
             original_path: 原始檔案路徑
@@ -90,19 +91,32 @@ class BatchProcessor:
             str: 新的檔案名稱
         """
         if self.config.filename_format == "uuid":
-            # 使用基於內容的UUID命名
-            content_filename = HashUtils.generate_content_based_filename(
+            # 使用包含原始檔名的UUID命名格式
+            content_filename = HashUtils.generate_filename_with_original_name(
                 original_path,
                 self.config.hash_algorithm
             )
             if content_filename:
                 return content_filename
             else:
-                # 如果雜湊計算失敗，使用隨機UUID
+                # 如果雜湊計算失敗，使用隨機UUID但仍包含原始檔名
+                sanitized_name = HashUtils._sanitize_filename(original_path.stem)
                 extension = original_path.suffix.lower()
-                return f"{uuid.uuid4().hex}{extension}"
+                return f"{sanitized_name}_{uuid.uuid4().hex}{extension}"
         else:
-            return self.image_processor.generate_filename(original_path)
+            # 無論什麼格式，都使用 {原始檔名}_{uuid}.{副檔名} 格式
+            # 這確保 images/transfer 中的檔案都使用新的命名格式
+            content_filename = HashUtils.generate_filename_with_original_name(
+                original_path,
+                self.config.hash_algorithm
+            )
+            if content_filename:
+                return content_filename
+            else:
+                # 如果雜湊計算失敗，使用隨機UUID但仍包含原始檔名
+                sanitized_name = HashUtils._sanitize_filename(original_path.stem)
+                extension = original_path.suffix.lower()
+                return f"{sanitized_name}_{uuid.uuid4().hex}{extension}"
     
     async def process_image(self, original_path: Path) -> Tuple[bool, Optional[Path], str]:
         """
@@ -228,14 +242,13 @@ class BatchProcessor:
                 )
                 
                 if upload_success:
-                    # 收集成功上傳的URL
-                    self.uploaded_urls.append(upload_result)
-                    
                     if is_duplicate:
                         # 檔案已存在，標記為重複
+                        # 重複檔案不加入 uploaded_urls 清單
                         self.progress_tracker.duplicate_file(original_path, upload_result)
                     else:
-                        # 上傳成功
+                        # 真正上傳成功，收集URL
+                        self.uploaded_urls.append(upload_result)
                         self.progress_tracker.complete_file(
                             original_path,
                             transfer_path.name,

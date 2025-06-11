@@ -1,2 +1,0 @@
-# 這個檔案確保transfer資料夾被Git追蹤
-# 但transfer資料夾內的檔案會被.gitignore忽略

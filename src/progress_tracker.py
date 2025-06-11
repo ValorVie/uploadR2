@@ -231,7 +231,8 @@ class ProgressTracker:
             self.duplicate_files.append(file_path.name)
             
             self.stats.processed_files += 1
-            self.stats.uploaded_files += 1  # 算作成功，因為檔案已經存在
+            # 修正：重複檔案不應該計入uploaded_files統計
+            self.stats.skipped_files += 1
             self.stats.processed_bytes += progress.file_size
             
             self._update_progress()
@@ -297,13 +298,15 @@ class ProgressTracker:
     def get_uploaded_files_with_urls(self) -> List[tuple]:
         """
         取得成功上傳檔案的原始檔名與URL對應清單
+        注意：此方法只返回真正成功上傳的檔案，不包含重複檔案
         
         Returns:
             List[tuple]: (原始檔名, URL) 的列表
         """
         uploaded_files = []
         for progress in self.file_progress.values():
-            if progress.status in ["completed", "duplicate"] and progress.upload_url:
+            # 只包含真正成功上傳的檔案，排除重複檔案
+            if progress.status == "completed" and progress.upload_url:
                 uploaded_files.append((progress.file_path.name, progress.upload_url))
         return uploaded_files
     

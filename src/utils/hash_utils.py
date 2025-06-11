@@ -95,6 +95,73 @@ class HashUtils:
         return f"{content_uuid}{extension}"
     
     @staticmethod
+    def generate_filename_with_original_name(file_path: Path, algorithm: str = "sha512") -> Optional[str]:
+        """
+        基於檔案內容生成包含原始檔名的檔案名稱
+        格式: {原始檔名}_{uuid}.{副檔名}
+        
+        Args:
+            file_path: 檔案路徑
+            algorithm: 雜湊演算法 (預設: sha512)
+            
+        Returns:
+            Optional[str]: 新檔案名稱，失敗時返回None
+        """
+        # 計算檔案雜湊
+        hash_value = HashUtils.calculate_file_hash(file_path, algorithm)
+        if hash_value is None:
+            return None
+        
+        # 轉換為UUID
+        content_uuid = HashUtils.hash_to_uuid(hash_value)
+        
+        # 獲取原始檔名（不含副檔名）並清理特殊字元
+        original_name = HashUtils._sanitize_filename(file_path.stem)
+        
+        # 保持原始副檔名
+        extension = file_path.suffix.lower()
+        
+        return f"{original_name}_{content_uuid}{extension}"
+    
+    @staticmethod
+    def _sanitize_filename(filename: str) -> str:
+        """
+        清理檔案名稱中的特殊字元
+        
+        Args:
+            filename: 原始檔案名稱
+            
+        Returns:
+            str: 清理後的檔案名稱
+        """
+        import re
+        
+        # 移除或替換檔案系統不安全的字元
+        # 保留中文字元（包括CJK統一漢字）、英文字母、數字、連字號和底線
+        sanitized = re.sub(r'[<>:"/\\|?*]', '_', filename)
+        
+        # 替換多個連續的空格和特殊空白字元為單個底線
+        sanitized = re.sub(r'\s+', '_', sanitized)
+        
+        # 移除其他控制字元，但保留中文字元
+        sanitized = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', sanitized)
+        
+        # 移除開頭和結尾的空格、點號和底線
+        sanitized = sanitized.strip(' ._')
+        
+        # 限制檔名長度，避免檔案系統限制問題
+        if len(sanitized.encode('utf-8')) > 200:  # 使用UTF-8位元組長度
+            # 如果太長，截取前部分
+            sanitized = sanitized[:100]  # 保守截取
+            sanitized = sanitized.rstrip('._')
+        
+        # 如果清理後為空，使用預設名稱
+        if not sanitized:
+            sanitized = "file"
+        
+        return sanitized
+    
+    @staticmethod
     def get_file_metadata(file_path: Path, algorithm: str = "sha512") -> dict:
         """
         取得檔案中繼資料

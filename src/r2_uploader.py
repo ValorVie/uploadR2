@@ -166,6 +166,7 @@ class R2Uploader:
     def generate_content_based_key(self, file_path: Path) -> Optional[str]:
         """
         基於檔案內容生成物件金鑰
+        R2上傳時使用純UUID格式（不包含原始檔名）
         
         Args:
             file_path: 檔案路徑
