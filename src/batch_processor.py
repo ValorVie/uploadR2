@@ -330,6 +330,24 @@ class BatchProcessor:
         """
         return self.uploaded_urls.copy()
     
+    def get_uploaded_files_with_urls(self) -> List[tuple]:
+        """
+        取得成功上傳檔案的原始檔名與URL對應清單
+        
+        Returns:
+            List[tuple]: (原始檔名, URL) 的列表
+        """
+        return self.progress_tracker.get_uploaded_files_with_urls()
+    
+    def get_duplicate_files(self) -> List[str]:
+        """
+        取得重複檔案的原始檔名清單
+        
+        Returns:
+            List[str]: 重複檔案的原始檔名清單
+        """
+        return self.progress_tracker.get_duplicate_files()
+    
     def cleanup_transfer_directory(self) -> None:
         """清理transfer目錄"""
         try:

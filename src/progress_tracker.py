@@ -88,6 +88,9 @@ class ProgressTracker:
         self.file_progress: Dict[str, FileProgress] = {}
         self.progress_bar: Optional[tqdm] = None
         self._last_update = 0.0
+        
+        # 記錄重複檔案的原始檔名清單
+        self.duplicate_files: List[str] = []
     
     def initialize(self, files: List[Path]) -> None:
         """
@@ -224,6 +227,9 @@ class ProgressTracker:
             progress.upload_url = upload_url
             progress.error_message = "檔案已存在，跳過上傳"
             
+            # 記錄重複檔案的原始檔名
+            self.duplicate_files.append(file_path.name)
+            
             self.stats.processed_files += 1
             self.stats.uploaded_files += 1  # 算作成功，因為檔案已經存在
             self.stats.processed_bytes += progress.file_size
@@ -278,6 +284,28 @@ class ProgressTracker:
             progress for progress in self.file_progress.values()
             if progress.status == "failed"
         ]
+    
+    def get_duplicate_files(self) -> List[str]:
+        """
+        取得重複檔案的原始檔名清單
+        
+        Returns:
+            List[str]: 重複檔案的原始檔名清單
+        """
+        return self.duplicate_files.copy()
+    
+    def get_uploaded_files_with_urls(self) -> List[tuple]:
+        """
+        取得成功上傳檔案的原始檔名與URL對應清單
+        
+        Returns:
+            List[tuple]: (原始檔名, URL) 的列表
+        """
+        uploaded_files = []
+        for progress in self.file_progress.values():
+            if progress.status in ["completed", "duplicate"] and progress.upload_url:
+                uploaded_files.append((progress.file_path.name, progress.upload_url))
+        return uploaded_files
     
     def get_summary(self) -> Dict:
         """

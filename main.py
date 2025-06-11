@@ -217,20 +217,19 @@ async def main_async(args: argparse.Namespace) -> int:
         logger.info(f"成功率: {summary['success_rate']:.2f}%")
         logger.info(f"總用時: {summary['elapsed_time']:.2f} 秒")
         
-        # 統計重複檔案
-        duplicate_count = len([
-            p for p in processor.progress_tracker.file_progress.values()
-            if p.status == "duplicate"
-        ])
-        if duplicate_count > 0:
-            logger.info(f"重複檔案（已存在）: {duplicate_count}")
+        # 顯示重複檔案清單
+        duplicate_files = processor.get_duplicate_files()
+        if duplicate_files:
+            logger.info("=== 重複檔案（已存在，跳過上傳）===")
+            for i, filename in enumerate(duplicate_files, 1):
+                logger.info(f"{i:2d}. {filename}")
         
-        # 顯示上傳成功的檔案URL清單
-        uploaded_urls = processor.get_uploaded_urls()
-        if uploaded_urls:
+        # 顯示上傳成功的檔案URL清單（包含原始檔名對應）
+        uploaded_files_with_urls = processor.get_uploaded_files_with_urls()
+        if uploaded_files_with_urls:
             logger.info("=== 上傳成功的圖片URL ===")
-            for i, url in enumerate(uploaded_urls, 1):
-                logger.info(f"{i:2d}. {url}")
+            for i, (filename, url) in enumerate(uploaded_files_with_urls, 1):
+                logger.info(f"{i:2d}. {filename} -> {url}")
         
         # 顯示失敗檔案
         failed_files = processor.get_failed_files()
