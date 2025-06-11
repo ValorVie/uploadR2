@@ -225,6 +225,13 @@ async def main_async(args: argparse.Namespace) -> int:
         if duplicate_count > 0:
             logger.info(f"重複檔案（已存在）: {duplicate_count}")
         
+        # 顯示上傳成功的檔案URL清單
+        uploaded_urls = processor.get_uploaded_urls()
+        if uploaded_urls:
+            logger.info("=== 上傳成功的圖片URL ===")
+            for i, url in enumerate(uploaded_urls, 1):
+                logger.info(f"{i:2d}. {url}")
+        
         # 顯示失敗檔案
         failed_files = processor.get_failed_files()
         if failed_files:

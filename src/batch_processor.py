@@ -44,6 +44,9 @@ class BatchProcessor:
             update_interval=config.progress_update_interval
         )
         
+        # 存儲上傳成功的檔案URL
+        self.uploaded_urls: List[str] = []
+        
         # 路徑設定
         self.original_dir = Path("images/original")
         self.transfer_dir = Path("images/transfer")
@@ -225,6 +228,9 @@ class BatchProcessor:
                 )
                 
                 if upload_success:
+                    # 收集成功上傳的URL
+                    self.uploaded_urls.append(upload_result)
+                    
                     if is_duplicate:
                         # 檔案已存在，標記為重複
                         self.progress_tracker.duplicate_file(original_path, upload_result)
@@ -314,6 +320,15 @@ class BatchProcessor:
             List: 失敗的檔案進度清單
         """
         return self.progress_tracker.get_failed_files()
+    
+    def get_uploaded_urls(self) -> List[str]:
+        """
+        取得所有成功上傳的檔案URL清單
+        
+        Returns:
+            List[str]: 上傳成功的檔案URL清單
+        """
+        return self.uploaded_urls.copy()
     
     def cleanup_transfer_directory(self) -> None:
         """清理transfer目錄"""

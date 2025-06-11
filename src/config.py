@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 from typing import List, Optional
 from pydantic import BaseModel, Field, validator
+import re
 from dotenv import load_dotenv
 
 
@@ -56,6 +57,9 @@ class Config(BaseModel):
     check_duplicate: bool = Field(default=True, description="是否檢查重複檔案")
     hash_algorithm: str = Field(default="sha512", description="雜湊演算法")
     
+    # 自定義域名配置
+    custom_domain: Optional[str] = Field(default=None, description="自定義域名，用於生成完整的圖片URL")
+    
     class Config:
         """Pydantic配置"""
         env_prefix = ""
@@ -84,6 +88,29 @@ class Config(BaseModel):
             # 如果是字串，則以逗號分隔
             v = [fmt.strip().lower() for fmt in v.split(',')]
         return [fmt.lower() for fmt in v]
+    
+    @validator('custom_domain')
+    def validate_custom_domain(cls, v):
+        """驗證自定義域名格式"""
+        if v is None or v.strip() == "":
+            return None
+        
+        # 移除末尾的斜線
+        v = v.rstrip('/')
+        
+        # 驗證URL格式
+        url_pattern = re.compile(
+            r'^https?://'  # http:// 或 https://
+            r'(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)*'  # 域名
+            r'[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?'  # 最後一級域名
+            r'(?::\d+)?'  # 可選的端口號
+            r'$', re.IGNORECASE
+        )
+        
+        if not url_pattern.match(v):
+            raise ValueError('custom_domain must be a valid URL (e.g., https://i.valorvie.net)')
+        
+        return v
     
     @property
     def max_file_size_bytes(self) -> int:
@@ -142,6 +169,7 @@ def load_config(env_file: Optional[str] = None) -> Config:
         validate_file_type=os.getenv("VALIDATE_FILE_TYPE", "true").lower() == "true",
         check_duplicate=os.getenv("CHECK_DUPLICATE", "true").lower() == "true",
         hash_algorithm=os.getenv("HASH_ALGORITHM", "sha512"),
+        custom_domain=os.getenv("CUSTOM_DOMAIN"),
     )
     
     # 確保必要的目錄存在

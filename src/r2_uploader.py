@@ -115,6 +115,23 @@ class R2Uploader:
         content_type, _ = mimetypes.guess_type(str(file_path))
         return content_type or 'application/octet-stream'
     
+    def _generate_file_url(self, object_key: str) -> str:
+        """
+        生成檔案的完整URL
+        
+        Args:
+            object_key: R2中的物件金鑰
+            
+        Returns:
+            str: 完整的檔案URL
+        """
+        if self.config.custom_domain:
+            # 使用自定義域名
+            return f"{self.config.custom_domain}/{object_key}"
+        else:
+            # 使用R2預設的公開URL格式
+            return f"{self.config.r2_endpoint_url.replace('https://', 'https://pub-')}/{self.config.r2_bucket_name}/{object_key}"
+    
     async def check_file_exists(self, object_key: str) -> bool:
         """
         檢查檔案是否已存在於R2中
@@ -194,7 +211,7 @@ class R2Uploader:
             exists = await self.check_file_exists(object_key)
             if exists:
                 # 產生檔案URL
-                file_url = f"{self.config.r2_endpoint_url.replace('https://', 'https://pub-')}/{self.config.r2_bucket_name}/{object_key}"
+                file_url = self._generate_file_url(object_key)
                 self.logger.info(f"檔案已存在，跳過上傳: {file_path} -> {object_key}")
                 return True, file_url, True  # 第三個參數表示是重複檔案
         
@@ -278,7 +295,7 @@ class R2Uploader:
             )
             
             # 產生檔案URL
-            file_url = f"{self.config.r2_endpoint_url.replace('https://', 'https://pub-')}/{self.config.r2_bucket_name}/{object_key}"
+            file_url = self._generate_file_url(object_key)
             
             self.logger.info(f"檔案上傳成功: {file_path} -> {object_key}")
             return True, file_url
