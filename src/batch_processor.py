@@ -250,12 +250,19 @@ class BatchProcessor:
                         # 清理重複檔案的 transfer 檔案
                         self.cleanup_duplicate_file(transfer_path)
                     else:
+                        # 計算檔案hash值用於CSV匯出
+                        file_hash = HashUtils.calculate_file_hash(
+                            transfer_path,
+                            self.config.hash_algorithm
+                        ) or ""
+                        
                         # 真正上傳成功，收集URL
                         self.uploaded_urls.append(upload_result)
                         self.progress_tracker.complete_file(
                             original_path,
                             transfer_path.name,
-                            upload_result
+                            upload_result,
+                            file_hash
                         )
                         
                         # 清理處理後的檔案（可選）
@@ -399,3 +406,19 @@ class BatchProcessor:
                 self.logger.info("transfer目錄清理完成")
         except Exception as e:
             self.logger.error(f"清理transfer目錄失敗: {str(e)}")
+    
+    def export_results_to_csv(self, csv_filepath: Optional[Path] = None) -> Optional[Path]:
+        """
+        將處理結果匯出為CSV檔案
+        
+        Args:
+            csv_filepath: CSV檔案路徑，如果未提供則自動生成
+            
+        Returns:
+            Optional[Path]: 匯出的CSV檔案路徑，失敗時返回None
+        """
+        try:
+            return self.progress_tracker.export_to_csv(csv_filepath)
+        except Exception as e:
+            self.logger.error(f"CSV匯出失敗: {str(e)}")
+            return None

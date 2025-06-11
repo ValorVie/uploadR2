@@ -4,6 +4,7 @@
 提供處理和上傳進度的追蹤功能。
 """
 
+import csv
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -67,6 +68,7 @@ class FileProgress:
     file_size: int = 0
     new_filename: str = ""
     upload_url: str = ""
+    file_hash: str = ""
 
 
 class ProgressTracker:
@@ -146,7 +148,7 @@ class ProgressTracker:
         if file_key in self.file_progress:
             self.file_progress[file_key].status = "uploading"
     
-    def complete_file(self, file_path: Path, new_filename: str = "", upload_url: str = "") -> None:
+    def complete_file(self, file_path: Path, new_filename: str = "", upload_url: str = "", file_hash: str = "") -> None:
         """
         完成檔案處理
         
@@ -154,6 +156,7 @@ class ProgressTracker:
             file_path: 檔案路徑
             new_filename: 新檔案名稱
             upload_url: 上傳URL
+            file_hash: 檔案hash值
         """
         file_key = str(file_path)
         if file_key in self.file_progress:
@@ -162,6 +165,7 @@ class ProgressTracker:
             progress.end_time = datetime.now()
             progress.new_filename = new_filename
             progress.upload_url = upload_url
+            progress.file_hash = file_hash
             
             self.stats.processed_files += 1
             self.stats.uploaded_files += 1
@@ -330,3 +334,52 @@ class ProgressTracker:
             "start_time": self.stats.start_time.isoformat() if self.stats.start_time else None,
             "end_time": self.stats.end_time.isoformat() if self.stats.end_time else None,
         }
+    
+    def export_to_csv(self, csv_filepath: Optional[Path] = None) -> Path:
+        """
+        將成功上傳的檔案資訊匯出為CSV檔案
+        
+        Args:
+            csv_filepath: CSV檔案路徑，如果未提供則自動生成
+            
+        Returns:
+            Path: 匯出的CSV檔案路徑
+        """
+        if csv_filepath is None:
+            # 自動生成檔案名稱
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            csv_filepath = Path("logs") / f"upload_results_{timestamp}.csv"
+        
+        # 確保目錄存在
+        csv_filepath.parent.mkdir(parents=True, exist_ok=True)
+        
+        # 收集成功上傳的檔案資訊
+        uploaded_files = []
+        for progress in self.file_progress.values():
+            # 只包含真正成功上傳的檔案，排除重複檔案
+            if progress.status == "completed" and progress.upload_url:
+                uploaded_files.append({
+                    "filename": progress.file_path.name,
+                    "hash": progress.file_hash,
+                    "url": progress.upload_url
+                })
+        
+        # 寫入CSV檔案
+        try:
+            with open(csv_filepath, 'w', newline='', encoding='utf-8-sig') as csvfile:
+                fieldnames = ['filename', 'hash', 'url']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                
+                # 寫入標題行
+                writer.writeheader()
+                
+                # 寫入資料行
+                for file_info in uploaded_files:
+                    writer.writerow(file_info)
+            
+            self.logger.info(f"CSV匯出完成: {csv_filepath} (共 {len(uploaded_files)} 筆記錄)")
+            return csv_filepath
+            
+        except Exception as e:
+            self.logger.error(f"CSV匯出失敗: {str(e)}")
+            raise

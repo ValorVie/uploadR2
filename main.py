@@ -248,6 +248,15 @@ async def main_async(args: argparse.Namespace) -> int:
             logger.warning("部分檔案處理失敗")
             return 1
         
+        # 匯出處理結果到CSV檔案
+        if summary['uploaded_files'] > 0:
+            logger.info("匯出處理結果到CSV檔案...")
+            csv_file = processor.export_results_to_csv()
+            if csv_file:
+                logger.info(f"CSV檔案已儲存: {csv_file}")
+            else:
+                logger.warning("CSV匯出失敗")
+        
         logger.info("✅ 所有檔案處理完成")
         return 0
         
