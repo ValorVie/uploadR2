@@ -83,9 +83,8 @@ class R2Uploader:
         try:
             # 嘗試列出儲存桶
             await asyncio.get_event_loop().run_in_executor(
-                None, 
-                self._client.head_bucket,
-                {'Bucket': self.config.r2_bucket_name}
+                None,
+                lambda: self._client.head_bucket(Bucket=self.config.r2_bucket_name)
             )
             self.logger.info("R2連接測試成功")
             return True
@@ -132,8 +131,7 @@ class R2Uploader:
         try:
             await asyncio.get_event_loop().run_in_executor(
                 None,
-                self._client.head_object,
-                {'Bucket': self.config.r2_bucket_name, 'Key': object_key}
+                lambda: self._client.head_object(Bucket=self.config.r2_bucket_name, Key=object_key)
             )
             return True
             
@@ -276,8 +274,7 @@ class R2Uploader:
             # 執行上傳
             await asyncio.get_event_loop().run_in_executor(
                 None,
-                self._client.put_object,
-                **upload_args
+                lambda: self._client.put_object(**upload_args)
             )
             
             # 產生檔案URL

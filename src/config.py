@@ -128,7 +128,7 @@ def load_config(env_file: Optional[str] = None) -> Config:
         max_concurrent_uploads=int(os.getenv("MAX_CONCURRENT_UPLOADS", "5")),
         max_retries=int(os.getenv("MAX_RETRIES", "3")),
         retry_delay=float(os.getenv("RETRY_DELAY", "1.0")),
-        supported_formats=os.getenv("SUPPORTED_FORMATS", "jpg,jpeg,png,gif,bmp,tiff,webp"),
+        supported_formats=[fmt.strip().lower() for fmt in os.getenv("SUPPORTED_FORMATS", "jpg,jpeg,png,gif,bmp,tiff,webp").split(',')],
         enable_compression=os.getenv("ENABLE_COMPRESSION", "true").lower() == "true",
         compression_quality=int(os.getenv("COMPRESSION_QUALITY", "85")),
         max_image_size=int(os.getenv("MAX_IMAGE_SIZE", "2048")),
