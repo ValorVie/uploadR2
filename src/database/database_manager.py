@@ -250,9 +250,14 @@ class DatabaseManager:
                     elif "sha512_hash" in error_msg:
                         raise DuplicateFileError(f"檔案雜湊已存在: {record.sha512_hash}")
                     elif "short_key" in error_msg:
-                        # 短檔名衝突，重試
-                        self.logger.warning(f"短檔名衝突，重試生成: {record.short_key}")
+                        # 短檔名衝突，重試生成（限制重試次數）
+                        retry_count = getattr(record, '_retry_count', 0)
+                        if retry_count >= 3:  # 最多重試3次
+                            raise DatabaseError(f"短檔名生成失敗，已重試 {retry_count} 次: {record.short_key}")
+                        
+                        self.logger.warning(f"短檔名衝突，重試生成 (第 {retry_count + 1} 次): {record.short_key}")
                         record.short_key = None  # 重置短檔名
+                        record._retry_count = retry_count + 1  # 增加重試計數
                         return self.store_file_record(record)  # 遞迴重試
                     else:
                         raise DatabaseError(f"數據庫完整性錯誤: {e}")
@@ -334,6 +339,26 @@ class DatabaseManager:
             if row:
                 return self._row_to_file_record(row)
             return None
+    
+    def check_short_key_exists(self, short_key: str) -> bool:
+        """
+        檢查短檔名是否已存在
+        
+        Args:
+            short_key: 要檢查的短檔名
+            
+        Returns:
+            bool: 短檔名是否已存在
+        """
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                SELECT 1 FROM file_records WHERE short_key = ? AND status = 'active'
+                LIMIT 1
+            """, (short_key,))
+            
+            return cursor.fetchone() is not None
     
     def update_file_record_upload_info(self, sha512_hash: str, r2_object_key: str, upload_url: str) -> bool:
         """

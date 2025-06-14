@@ -112,6 +112,7 @@ class ShortKeyGenerator:
     def _get_current_length(self, cursor: sqlite3.Cursor) -> int:
         """
         獲取當前應該使用的長度
+        考慮序列接近滿載時自動升級
         
         Args:
             cursor: 資料庫游標
@@ -119,19 +120,54 @@ class ShortKeyGenerator:
         Returns:
             int: 當前長度
         """
+        # 檢查是否有可用的序列，並考慮使用率
         cursor.execute("""
-            SELECT key_length FROM short_key_sequences 
-            WHERE NOT exhausted 
-            ORDER BY key_length ASC 
-            LIMIT 1
+            SELECT key_length, current_sequence, max_possible,
+                   CAST(current_sequence AS FLOAT) / max_possible as usage_ratio
+            FROM short_key_sequences
+            WHERE NOT exhausted
+            ORDER BY key_length ASC
+        """)
+        
+        rows = cursor.fetchall()
+        
+        for row in rows:
+            length, current, max_possible, usage_ratio = row
+            
+            # 如果使用率超過 85%，考慮這個長度已經"接近滿載"
+            # 調整閾值以更容易觸發升級
+            if usage_ratio < 0.80:
+                self.logger.debug(f"選擇長度 {length} (使用率: {usage_ratio*100:.1f}%)")
+                return length
+            elif usage_ratio < 0.85:
+                # 使用率在 80-85% 之間，仍可以使用但會記錄警告
+                self.logger.warning(f"長度 {length} 接近滿載 (使用率: {usage_ratio*100:.1f}%)，仍可使用")
+                return length
+            else:
+                # 使用率超過 85%，標記為已耗盡並繼續檢查下一個長度
+                self.logger.warning(f"長度 {length} 使用率過高 ({usage_ratio*100:.1f}%)，標記為已耗盡，嘗試升級")
+                print(f"🔄 長度 {length} 已達到 {usage_ratio*100:.1f}% 使用率，觸發升級機制")
+                cursor.execute("""
+                    UPDATE short_key_sequences
+                    SET exhausted = TRUE
+                    WHERE key_length = ?
+                """, (length,))
+                continue
+        
+        # 如果所有長度都已耗盡或接近耗盡，創建新的長度序列
+        # 獲取當前最大長度
+        cursor.execute("""
+            SELECT MAX(key_length) FROM short_key_sequences
         """)
         
         row = cursor.fetchone()
-        if row:
-            return row[0]
+        current_max_length = row[0] if row and row[0] else 3  # 預設從3開始，下面會升級到4
         
-        # 如果沒有可用長度，創建新的長度記錄
-        return self._create_new_length_sequence(cursor, 4)  # 從4開始
+        # 創建下一個長度的序列
+        next_length = current_max_length + 1
+        self.logger.info(f"所有現有長度已滿載，創建新長度序列: {next_length}")
+        print(f"🆙 自動升級: {current_max_length} 位 → {next_length} 位")
+        return self._create_new_length_sequence(cursor, next_length)
     
     def _calculate_max_possible(self, length: int) -> int:
         """
@@ -161,12 +197,18 @@ class ShortKeyGenerator:
         """
         max_possible = self._calculate_max_possible(length)
         
+        # 使用 INSERT OR IGNORE 避免重複插入
         cursor.execute("""
-            INSERT INTO short_key_sequences (key_length, current_sequence, max_possible)
+            INSERT OR IGNORE INTO short_key_sequences (key_length, current_sequence, max_possible)
             VALUES (?, 0, ?)
         """, (length, max_possible))
         
-        self.logger.info(f"創建新的長度序列: {length} (最大組合數: {max_possible})")
+        # 檢查是否實際插入了新記錄
+        if cursor.rowcount > 0:
+            self.logger.info(f"創建新的長度序列: {length} (最大組合數: {max_possible})")
+        else:
+            self.logger.debug(f"長度序列已存在: {length}")
+        
         return length
     
     def _is_reserved_key(self, cursor: sqlite3.Cursor, key: str) -> bool:
