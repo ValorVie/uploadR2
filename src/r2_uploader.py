@@ -16,6 +16,8 @@ import aiofiles
 from .config import Config
 from .utils.logger import get_logger
 from .utils.hash_utils import HashUtils
+from .utils.database_integration import DatabaseIntegration, create_database_integration
+from .database import DuplicateFileError
 
 
 class R2UploadError(Exception):
@@ -37,6 +39,9 @@ class R2Uploader:
         self.logger = get_logger(__name__)
         self._client: Optional[boto3.client] = None
         self._semaphore: Optional[asyncio.Semaphore] = None
+        
+        # 初始化資料庫整合
+        self.db_integration = create_database_integration(config)
     
     def _initialize_client(self) -> None:
         """初始化S3客戶端"""
@@ -136,32 +141,16 @@ class R2Uploader:
         """
         檢查檔案是否已存在於R2中
         
+        注意：此方法已棄用，重複檢測現在完全在本地資料庫中進行
+        
         Args:
             object_key: R2中的物件金鑰
             
         Returns:
             bool: 檔案是否存在
         """
-        if self._client is None:
-            self._initialize_client()
-        
-        try:
-            await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: self._client.head_object(Bucket=self.config.r2_bucket_name, Key=object_key)
-            )
-            return True
-            
-        except ClientError as e:
-            if e.response['Error']['Code'] == '404':
-                return False
-            else:
-                # 其他錯誤，假設檔案不存在
-                self.logger.warning(f"檢查檔案存在時發生錯誤: {e}")
-                return False
-        except Exception as e:
-            self.logger.warning(f"檢查檔案存在時發生錯誤: {e}")
-            return False
+        self.logger.warning("check_file_exists 方法已棄用，重複檢測現在完全在本地資料庫中進行")
+        return False
     
     def generate_content_based_key(self, file_path: Path) -> Optional[str]:
         """
@@ -188,7 +177,7 @@ class R2Uploader:
         
         Args:
             file_path: 本地檔案路徑
-            object_key: R2中的物件金鑰，如果為None則自動生成基於內容的金鑰
+            object_key: R2中的物件金鑰，如果為None則基於短檔名生成
             metadata: 額外的中繼資料
             check_duplicate: 是否檢查重複檔案
             
@@ -201,20 +190,45 @@ class R2Uploader:
         if self._semaphore is None:
             raise R2UploadError("上傳器未正確初始化")
         
-        # 如果沒有提供object_key，則基於檔案內容生成
-        if object_key is None:
-            object_key = self.generate_content_based_key(file_path)
-            if object_key is None:
-                return False, "無法生成檔案金鑰", False
+        # 檢查重複檔案（完全在本地資料庫執行）
+        if check_duplicate and self.db_integration:
+            existing_record = self.db_integration.check_duplicate_file(file_path)
+            if existing_record:
+                self.logger.info(f"資料庫中發現重複檔案: {file_path} -> {existing_record.short_key or existing_record.uuid_key}")
+                # 如果有短檔名，使用短檔名URL
+                if existing_record.short_key:
+                    file_url = self._generate_file_url(existing_record.short_key + existing_record.file_extension)
+                else:
+                    file_url = existing_record.upload_url
+                return True, file_url, True
         
-        # 檢查重複檔案
-        if check_duplicate:
-            exists = await self.check_file_exists(object_key)
-            if exists:
-                # 產生檔案URL
-                file_url = self._generate_file_url(object_key)
-                self.logger.info(f"檔案已存在，跳過上傳: {file_path} -> {object_key}")
-                return True, file_url, True  # 第三個參數表示是重複檔案
+        # 如果沒有重複，先生成短檔名作為 object_key
+        if object_key is None:
+            if self.db_integration:
+                # 創建臨時檔案記錄以生成短檔名
+                temp_record = self.db_integration.create_file_record_from_path(
+                    file_path, "", ""  # R2 object key 和 URL 暫時為空
+                )
+                # 存儲記錄以生成短檔名
+                try:
+                    self.db_integration.store_file_record(temp_record)
+                    if temp_record.short_key:
+                        object_key = temp_record.short_key + temp_record.file_extension
+                    else:
+                        object_key = temp_record.uuid_key + temp_record.file_extension
+                except DuplicateFileError:
+                    # 如果存儲時發現重複，返回現有記錄
+                    existing_record = self.db_integration.check_duplicate_file(file_path)
+                    if existing_record and existing_record.short_key:
+                        file_url = self._generate_file_url(existing_record.short_key + existing_record.file_extension)
+                        return True, file_url, True
+                    else:
+                        return False, "檔案記錄衝突", False
+            else:
+                # 如果沒有資料庫整合，使用內容雜湊
+                object_key = self.generate_content_based_key(file_path)
+                if object_key is None:
+                    return False, "無法生成檔案金鑰", False
         
         async with self._semaphore:
             success, message = await self._upload_with_retry(file_path, object_key, metadata)
@@ -297,6 +311,34 @@ class R2Uploader:
             
             # 產生檔案URL
             file_url = self._generate_file_url(object_key)
+            
+            # 更新資料庫記錄中的上傳資訊
+            if self.db_integration:
+                try:
+                    # 計算檔案雜湊以更新記錄
+                    sha512_hash = HashUtils.calculate_file_hash(file_path, self.config.hash_algorithm)
+                    if sha512_hash:
+                        # 更新現有記錄的 R2 資訊
+                        update_success = self.db_integration.update_file_record_upload_info(
+                            sha512_hash, object_key, file_url
+                        )
+                        if update_success:
+                            self.logger.info(f"檔案上傳成功: {file_path} -> {object_key}")
+                        else:
+                            # 如果更新失敗，可能是記錄不存在，創建新記錄
+                            file_record = self.db_integration.create_file_record_from_path(
+                                file_path, object_key, file_url
+                            )
+                            self.db_integration.store_file_record(file_record)
+                            self.logger.info(f"檔案上傳成功並創建新記錄: {file_path} -> {object_key}")
+                    else:
+                        self.logger.warning(f"無法計算檔案雜湊，跳過資料庫更新: {file_path}")
+                except DuplicateFileError:
+                    # 檔案重複，但上傳已成功
+                    self.logger.warning(f"檔案上傳成功但資料庫記錄重複: {file_path}")
+                except Exception as e:
+                    # 資料庫存儲失敗不影響上傳成功
+                    self.logger.error(f"資料庫記錄更新失敗: {e}")
             
             self.logger.info(f"檔案上傳成功: {file_path} -> {object_key}")
             return True, file_url
@@ -398,6 +440,10 @@ class R2Uploader:
         
         if self._semaphore:
             self._semaphore = None
+        
+        # 關閉資料庫連接
+        if self.db_integration:
+            self.db_integration.close()
         
         self.logger.info("R2上傳器已關閉")
     

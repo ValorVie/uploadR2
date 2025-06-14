@@ -1,7 +1,7 @@
 [project]
 name = "uploadr2"
 version = "0.1.0"
-description = "批量上傳圖片到Cloudflare R2存儲的工具"
+description = "批量上傳圖片到Cloudflare R2存儲的工具，支援SQLite資料庫和短檔名功能"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

@@ -35,7 +35,7 @@ class Config(BaseModel):
     # 圖片壓縮配置
     enable_compression: bool = Field(default=True, description="是否啟用壓縮")
     compression_quality: int = Field(default=85, ge=1, le=100, description="壓縮品質")
-    max_image_size: int = Field(default=2048, ge=128, le=8192, description="最大圖片尺寸")
+    max_image_size: int = Field(default=2048, ge=128, le=20480, description="最大圖片尺寸")
     
     # 日誌配置
     log_level: str = Field(default="INFO", description="日誌等級")
@@ -59,6 +59,19 @@ class Config(BaseModel):
     
     # 自定義域名配置
     custom_domain: Optional[str] = Field(default=None, description="自定義域名，用於生成完整的圖片URL")
+    
+    # 資料庫配置
+    database_path: str = Field(default="data/uploadr2.db", description="SQLite資料庫路徑")
+    database_pool_size: int = Field(default=10, ge=1, le=50, description="資料庫連接池大小")
+    
+    # 短檔名配置
+    enable_short_keys: bool = Field(default=True, description="是否啟用短檔名")
+    short_key_min_length: int = Field(default=4, ge=3, le=10, description="短檔名最小長度")
+    short_key_charset: str = Field(default="alphanumeric_mixed", description="字符集類型")
+    
+    # 安全配置擴展
+    short_key_salt_length: int = Field(default=16, ge=8, le=32, description="鹽值長度")
+    max_short_key_attempts: int = Field(default=100, ge=10, le=1000, description="短檔名生成最大嘗試次數")
     
     class Config:
         """Pydantic配置"""
@@ -123,6 +136,7 @@ class Config(BaseModel):
             Path(self.log_file).parent,
             Path("images/original"),
             Path("images/transfer"),
+            Path(self.database_path).parent,
         ]
         
         for directory in directories:
@@ -170,6 +184,13 @@ def load_config(env_file: Optional[str] = None) -> Config:
         check_duplicate=os.getenv("CHECK_DUPLICATE", "true").lower() == "true",
         hash_algorithm=os.getenv("HASH_ALGORITHM", "sha512"),
         custom_domain=os.getenv("CUSTOM_DOMAIN"),
+        database_path=os.getenv("DATABASE_PATH", "data/uploadr2.db"),
+        database_pool_size=int(os.getenv("DATABASE_POOL_SIZE", "10")),
+        enable_short_keys=os.getenv("ENABLE_SHORT_KEYS", "true").lower() == "true",
+        short_key_min_length=int(os.getenv("SHORT_KEY_MIN_LENGTH", "4")),
+        short_key_charset=os.getenv("SHORT_KEY_CHARSET", "alphanumeric_mixed"),
+        short_key_salt_length=int(os.getenv("SHORT_KEY_SALT_LENGTH", "16")),
+        max_short_key_attempts=int(os.getenv("MAX_SHORT_KEY_ATTEMPTS", "100")),
     )
     
     # 確保必要的目錄存在

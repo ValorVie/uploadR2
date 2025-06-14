@@ -234,10 +234,10 @@ class BatchProcessor:
                 # 開始上傳
                 self.progress_tracker.start_file_uploading(original_path)
                 
-                # 上傳到R2（使用基於內容的檔案名稱和重複檢查）
+                # 上傳到R2（使用短檔名和本地重複檢查）
                 upload_success, upload_result, is_duplicate = await uploader.upload_file(
                     transfer_path,
-                    object_key=None,  # 讓上傳器自動生成基於內容的金鑰
+                    object_key=None,  # 讓上傳器生成短檔名作為 R2 金鑰
                     check_duplicate=self.config.check_duplicate
                 )
                 
